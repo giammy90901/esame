@@ -1,189 +1,308 @@
 import pygame
 import random
+import sys
+import pickle
 
-# Inizializzazione di Pygame
+# Inizializzazione Pygame
 pygame.init()
 
-# Definizione dei colori
+# Impostazioni dello schermo
+larghezza_schermo = 400
+altezza_schermo = 400
+schermo = pygame.display.set_mode((larghezza_schermo, altezza_schermo))
+pygame.display.set_caption("Snake di giammy")
+
+# Caricamento delle immagini
+sfondo_img = pygame.image.load('sfondo_riprova.jpg')
+sfondo_img = pygame.transform.scale(sfondo_img, (200, 200))
+
+# Caricamento immagini della mela di varie dimensioni
+mela_imgs = {
+    10: pygame.transform.scale(pygame.image.load('mela.png'), (10, 10)),
+    15: pygame.transform.scale(pygame.image.load('mela.png'), (15, 15)),
+    20: pygame.transform.scale(pygame.image.load('mela.png'), (20, 20))
+}
+
+# Colori
 nero = (0, 0, 0)
+verde = (0, 200, 0)
 bianco = (255, 255, 255)
 
-# Impostazioni dello schermo
-larghezza = 800
-altezza = 600
-dimensioni_blocco = 20
+# Impostazioni del serpente
+dimensione_blocco = 20
 
-# Caricamento dell'immagine della mela e del bonus
-mela_img = pygame.Surface((dimensioni_blocco, dimensioni_blocco))
-mela_img.fill((255, 0, 0))  # Colore rosso per la mela
-bonus_img = pygame.Surface((dimensioni_blocco, dimensioni_blocco))
-bonus_img.fill((0, 255, 0))  # Colore verde per il bonus
+# Font
+font = pygame.font.SysFont(None, 30)
 
-# Inizializzazione dello schermo
-schermo = pygame.display.set_mode((larghezza, altezza))
-pygame.display.set_caption("Snake")
+# Variabili di gioco
+direzione = 'DESTRA'
+cambio_direzione = direzione
+mele_mangiate = 0
+lunghezza_serpente = 1
+serpente = []
+testa_serpente = [larghezza_schermo / 2, altezza_schermo / 2]
+serpente.append(testa_serpente)
+dimensione_mela = 20  # Imposta la dimensione predefinita della mela
+posizione_mela = [random.randint(1, (larghezza_schermo - dimensione_blocco) // dimensione_blocco) * dimensione_blocco,
+                  random.randint(1, (altezza_schermo - dimensione_blocco) // dimensione_blocco) * dimensione_blocco]
 
-# Font per il testo
-font = pygame.font.SysFont(None, 36)
+# Variabile di fine partita
+fine_partita = False
 
-# Orologio per controllare la velocità del gioco
-orologio = pygame.time.Clock()
+# Variabile di difficoltà
+difficolta = 'normale'
 
-def disegna_sfondo():
-    for x in range(0, larghezza, dimensioni_blocco):
-        for y in range(0, altezza, dimensioni_blocco):
-            if (x // dimensioni_blocco + y // dimensioni_blocco) % 3 == 1:
-                colore = (0, 100, 0)  # Colore verde scuro per i quadrati alternati
-            else:
-                colore = (0, 150, 0)  # Colore verde chiaro per i quadrati alternati
-            pygame.draw.rect(schermo, colore, [x, y, dimensioni_blocco, dimensioni_blocco])
+# Velocità iniziale del serpente
+velocita_serpente = 10
 
-def disegna_testa(testa):
-    pygame.draw.rect(schermo, bianco, pygame.Rect(testa[0], testa[1], dimensioni_blocco, dimensioni_blocco))
+def mostra_menu():
+    global difficolta
+    menu = True
 
-def disegna_corpo(corpo):
-    for blocco in corpo:
-        pygame.draw.rect(schermo, bianco, pygame.Rect(blocco[0], blocco[1], dimensioni_blocco, dimensioni_blocco))
+    while menu:
+        schermo.fill(nero)
+        mostra_testo("Scegli la difficoltà:", bianco, -50)
+        mostra_testo("1. Facile", bianco, -10)
+        mostra_testo("2. Normale", bianco, 20)
+        mostra_testo("3. Difficile", bianco, 50)
+        pygame.display.update()
 
-def disegna_mela(mela):
-    schermo.blit(mela_img, (mela[0], mela[1]))
+        for evento in pygame.event.get():
+            if evento.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if evento.type == pygame.KEYDOWN:
+                if evento.key == pygame.K_1:
+                    difficolta = 'facile'
+                    menu = False
+                if evento.key == pygame.K_2:
+                    difficolta = 'normale'
+                    menu = False
+                if evento.key == pygame.K_3:
+                    difficolta = 'difficile'
+                    menu = False
 
-def disegna_bonus(bonus):
-    schermo.blit(bonus_img, (bonus[0], bonus[1]))
+def fine_gioco():
+    global fine_partita
+    fine_partita = True
 
-def genera_mela():
-    x = random.randrange(0, larghezza - dimensioni_blocco, dimensioni_blocco)
-    y = random.randrange(0, altezza - dimensioni_blocco, dimensioni_blocco)
-    return [x, y]
+    while True:
+        schermo.fill(nero)
+        schermo.blit(sfondo_img, (100, 100))
+        mostra_testo("Premi 'R' per riprovare o 'ESC' per uscire.", bianco, 150)
+        mostra_punteggio()
+        pygame.display.update()
 
-def genera_bonus(corpo):
-    if random.randint(0, 100) < 5:  # Genera il bonus casualmente con una probabilità del 5%
-        x = random.randrange(0, larghezza - dimensioni_blocco, dimensioni_blocco)
-        y = random.randrange(0, altezza - dimensioni_blocco, dimensioni_blocco)
-        # Assicurati che il bonus non si sovrapponga al serpente
-        if [x, y] not in corpo:
-            return [x, y]
-    return None
+        for evento in pygame.event.get():
+            if evento.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if evento.type == pygame.KEYDOWN:
+                if evento.key == pygame.K_r:
+                    fine_partita = False
+                    reset_game()
+                    return
+                if evento.key == pygame.K_ESCAPE:
+                    pygame.quit()
+                    sys.exit()
 
-def mostra_punteggio(punteggio):
-    testo = font.render("Punteggio: " + str(punteggio), True, bianco)
+def schermata_vittoria():
+    while True:
+        schermo.fill(nero)
+        mostra_testo("Hai vinto!", bianco, -30)
+        mostra_testo("Premi 'R' per riprovare o 'ESC' per uscire.", bianco, 10)
+        pygame.display.update()
+
+        for evento in pygame.event.get():
+            if evento.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if evento.type == pygame.KEYDOWN:
+                if evento.key == pygame.K_r:
+                    reset_game()
+                    return
+                if evento.key == pygame.K_ESCAPE:
+                    pygame.quit()
+                    sys.exit()
+
+def reset_game():
+    global direzione, cambio_direzione, mele_mangiate, lunghezza_serpente, serpente, testa_serpente, posizione_mela, velocita_serpente
+    direzione = 'DESTRA'
+    cambio_direzione = direzione
+    mele_mangiate = 0
+    lunghezza_serpente = 1
+    serpente.clear()
+    testa_serpente = [larghezza_schermo / 2, altezza_schermo / 2]
+    serpente.append(testa_serpente)
+    posizione_mela = [random.randint(1, (larghezza_schermo - dimensione_blocco) // dimensione_blocco) * dimensione_blocco,
+                      random.randint(1, (altezza_schermo - dimensione_blocco) // dimensione_blocco) * dimensione_blocco]
+    velocita_serpente = 10
+
+def mostra_punteggio(velocita_attuale=''):
+    testo = font.render("Mele mangiate: " + str(mele_mangiate), True, bianco)
     schermo.blit(testo, [10, 10])
+    testo_velocita = font.render("Velocità: " + str(velocita_attuale), True, bianco)
+    schermo.blit(testo_velocita, [larghezza_schermo - 150, 10])
 
-def schermata_riprova(punteggio, uscita=False):
+def mostra_testo(testo, colore, y_displacement=0):
+    surface = font.render(testo, True, colore)
+    rect = surface.get_rect()
+    rect.center = (larghezza_schermo / 2), (altezza_schermo / 2) + y_displacement
+    schermo.blit(surface, rect)
+
+def salva_gioco():
+    stato_gioco = {
+        'direzione': direzione,
+        'cambio_direzione': cambio_direzione,
+        'mele_mangiate': mele_mangiate,
+        'lunghezza_serpente': lunghezza_serpente,
+        'serpente': serpente,
+        'testa_serpente': testa_serpente,
+        'posizione_mela': posizione_mela,
+        'velocita_serpente': velocita_serpente,
+        'dimensione_mela': dimensione_mela,
+        'difficolta': difficolta
+    }
+    with open('salvataggio_gioco.pkl', 'wb') as file:
+        pickle.dump(stato_gioco, file)
+
+def carica_gioco():
+    global direzione, cambio_direzione, mele_mangiate, lunghezza_serpente, serpente, testa_serpente, posizione_mela, velocita_serpente, dimensione_mela, difficolta
+    try:
+        with open('salvataggio_gioco.pkl', 'rb') as file:
+            stato_gioco = pickle.load(file)
+            direzione = stato_gioco['direzione']
+            cambio_direzione = stato_gioco['cambio_direzione']
+            mele_mangiate = stato_gioco['mele_mangiate']
+            lunghezza_serpente = stato_gioco['lunghezza_serpente']
+            serpente = stato_gioco['serpente']
+            testa_serpente = stato_gioco['testa_serpente']
+            posizione_mela = stato_gioco['posizione_mela']
+            velocita_serpente = stato_gioco['velocita_serpente']
+            dimensione_mela = stato_gioco['dimensione_mela']
+            difficolta = stato_gioco['difficolta']
+    except FileNotFoundError:
+        mostra_testo("Nessun salvataggio trovato.", bianco)
+        pygame.display.update()
+        pygame.time.wait(2000)
+
+def schermata_salvataggio():
     schermo.fill(nero)
-    disegna_sfondo()  # Disegna lo sfondo della griglia
-    testo_punteggio = font.render("Punteggio: " + str(punteggio), True, bianco)
-    testo_dimensioni_punteggio = testo_punteggio.get_rect(center=(larghezza / 2, altezza / 2))
-    schermo.blit(testo_punteggio, testo_dimensioni_punteggio)
-    testo_riprova = font.render("Riprova", True, bianco)
-    testo_exit = font.render("Exit", True, bianco)
-    testo_dimensioni_riprova = testo_riprova.get_rect(center=(larghezza / 2 - 100, altezza / 2 + 50))
-    testo_dimensioni_exit = testo_exit.get_rect(center=(larghezza / 2 + 100, altezza / 2 + 50))
-    schermo.blit(testo_riprova, testo_dimensioni_riprova)
-    schermo.blit(testo_exit, testo_dimensioni_exit)
-    if uscita:
-        testo_grazie = font.render("Grazie per aver giocato!", True, bianco)
-        testo_grazie_dimensioni = testo_grazie.get_rect(center=(larghezza / 2, altezza / 2 + 100))
-        schermo.blit(testo_grazie, testo_grazie_dimensioni)
+    mostra_testo("Vuoi creare un salvataggio?", bianco, -30)
+    mostra_testo("1. Sì", bianco, 10)
+    mostra_testo("2. No", bianco, 40)
     pygame.display.update()
 
     while True:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
+        for evento in pygame.event.get():
+            if evento.type == pygame.QUIT:
                 pygame.quit()
-                quit()
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                mouse_pos = pygame.mouse.get_pos()
-                if testo_dimensioni_riprova.collidepoint(mouse_pos):
-                    return "riprova"
-                elif testo_dimensioni_exit.collidepoint(mouse_pos):
-                    return "exit"
+                sys.exit()
+            if evento.type == pygame.KEYDOWN:
+                if evento.key == pygame.K_1:
+                    salva_gioco()
+                    return
+                if evento.key == pygame.K_2:
+                    return
 
-def gioco():
-    testa = [larghezza / 2, altezza / 2]
-    corpo = [[testa[0] - dimensioni_blocco, testa[1]],
-             [testa[0] - (2 * dimensioni_blocco), testa[1]]]
-    direzione = 'RIGHT'
-    cambio_direzione = direzione
-    punteggio = 0
-    mela = genera_mela()
-    bonus = None
-    immortale = False
-    immortale_timer = 0
+def main():
+    global direzione, cambio_direzione, mele_mangiate, lunghezza_serpente, serpente, testa_serpente, posizione_mela, fine_partita, dimensione_mela, velocita_serpente
+
+    mostra_menu()
+
+    if difficolta == 'facile':
+        velocita_serpente = 10
+    elif difficolta == 'normale':
+        velocita_serpente = 15
+    elif difficolta == 'difficile':
+        velocita_serpente = 20
 
     while True:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                return punteggio
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_LEFT:
-                    cambio_direzione = 'LEFT'
-                elif event.key == pygame.K_RIGHT:
-                    cambio_direzione = 'RIGHT'
-                elif event.key == pygame.K_UP:
-                    cambio_direzione = 'UP'
-                elif event.key == pygame.K_DOWN:
-                    cambio_direzione = 'DOWN'
-
-        if cambio_direzione == 'LEFT' and direzione != 'RIGHT':
-            direzione = cambio_direzione
-        elif cambio_direzione == 'RIGHT' and direzione != 'LEFT':
-            direzione = cambio_direzione
-        elif cambio_direzione == 'UP' and direzione != 'DOWN':
-            direzione = cambio_direzione
-        elif cambio_direzione == 'DOWN' and direzione != 'UP':
-            direzione = cambio_direzione
-
-        if direzione == 'LEFT':
-            testa[0] -= dimensioni_blocco
-        elif direzione == 'RIGHT':
-            testa[0] += dimensioni_blocco
-        elif direzione == 'UP':
-            testa[1] -= dimensioni_blocco
-        elif direzione == 'DOWN':
-            testa[1] += dimensioni_blocco
-
-        if testa[0] < 0 or testa[0] >= larghezza or testa[1] < 0 or testa[1] >= altezza:
-            return punteggio
-        if testa in corpo[1:]:
-            return punteggio
-
-        corpo.insert(0, list(testa))
-        if testa == mela:
-            punteggio += 10
-            mela = genera_mela()
-            bonus = genera_bonus(corpo)  # Genera il bonus quando la mela viene mangiata
-        else:
-            corpo.pop()
-
-        if bonus:
-            if testa == bonus:
-                punteggio += 50  # Aggiungi punteggio extra se il serpente mangia il bonus
-                immortale = True  # Attiva la modalità immortale se il serpente mangia il bonus
-                immortale_timer = pygame.time.get_ticks()
-
-        if immortale and pygame.time.get_ticks() - immortale_timer >= 5000:
-            immortale = False  # Disattiva la modalità immortale dopo 5 secondi
-
         schermo.fill(nero)
-        disegna_sfondo()  # Disegna lo sfondo della griglia
-        disegna_mela(mela)
-        if bonus:
-            disegna_bonus(bonus)
-        disegna_testa(testa)
-        disegna_corpo(corpo)
-        mostra_punteggio(punteggio)
+
+        for evento in pygame.event.get():
+            if evento.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if evento.type == pygame.KEYDOWN:
+                if evento.key == pygame.K_LEFT and direzione != 'DESTRA':
+                    cambio_direzione = 'SINISTRA'
+                if evento.key == pygame.K_RIGHT and direzione != 'SINISTRA':
+                    cambio_direzione = 'DESTRA'
+                if evento.key == pygame.K_UP and direzione != 'GIU':
+                    cambio_direzione = 'SU'
+                if evento.key == pygame.K_DOWN and direzione != 'SU':
+                    cambio_direzione = 'GIU'
+                if evento.key == pygame.K_1:
+                    dimensione_mela = 10
+                if evento.key == pygame.K_2:
+                    dimensione_mela = 15
+                if evento.key == pygame.K_3:
+                    dimensione_mela = 20
+                if evento.key == pygame.K_r:
+                    reset_game()
+                if evento.key == pygame.K_s:  # Salva il gioco
+                    schermata_salvataggio()
+
+        direzione = cambio_direzione
+
+        if direzione == 'SU':
+            testa_serpente[1] -= dimensione_blocco
+            if difficolta != 'difficile' and testa_serpente[1] < 0:
+                testa_serpente[1] = altezza_schermo - dimensione_blocco
+        if direzione == 'GIU':
+            testa_serpente[1] += dimensione_blocco
+            if difficolta != 'difficile' and testa_serpente[1] >= altezza_schermo:
+                testa_serpente[1] = 0
+        if direzione == 'SINISTRA':
+            testa_serpente[0] -= dimensione_blocco
+            if difficolta != 'difficile' and testa_serpente[0] < 0:
+                testa_serpente[0] = larghezza_schermo - dimensione_blocco
+        if direzione == 'DESTRA':
+            testa_serpente[0] += dimensione_blocco
+            if difficolta != 'difficile' and testa_serpente[0] >= larghezza_schermo:
+                testa_serpente[0] = 0
+
+        serpente.append(list(testa_serpente))
+        if len(serpente) > lunghezza_serpente:
+            del serpente[0]
+
+        if difficolta == 'difficile':
+            if testa_serpente[0] < 0 or testa_serpente[0] >= larghezza_schermo or \
+                    testa_serpente[1] < 0 or testa_serpente[1] >= altezza_schermo:
+                fine_gioco()
+
+        if difficolta != 'facile':
+            for blocco in serpente[:-1]:
+                if blocco == testa_serpente:
+                    fine_gioco()
+
+        if testa_serpente[0] == posizione_mela[0] and testa_serpente[1] == posizione_mela[1]:
+            mele_mangiate += 1
+            lunghezza_serpente += 1
+            posizione_mela = [random.randint(1, (larghezza_schermo - dimensione_blocco) // dimensione_blocco) * dimensione_blocco,
+                              random.randint(1, (altezza_schermo - dimensione_blocco) // dimensione_blocco) * dimensione_blocco]
+            velocita_serpente += 1
+
+        # Verifica se il serpente ha raggiunto la lunghezza massima possibile
+        if lunghezza_serpente == (larghezza_schermo // dimensione_blocco) * (altezza_schermo // dimensione_blocco):
+            schermata_vittoria()
+
+        for x in range(0, larghezza_schermo, dimensione_blocco):
+            pygame.draw.line(schermo, verde, (x, 0), (x, altezza_schermo))
+        for y in range(0, altezza_schermo, dimensione_blocco):
+            pygame.draw.line(schermo, verde, (0, y), (larghezza_schermo, y))
+
+        for pos in serpente:
+            pygame.draw.rect(schermo, verde, pygame.Rect(pos[0], pos[1], dimensione_blocco, dimensione_blocco))
+
+        schermo.blit(mela_imgs[dimensione_mela], (posizione_mela[0], posizione_mela[1]))
+
+        mostra_punteggio(velocita_serpente)
+
         pygame.display.update()
-        orologio.tick(15 + punteggio // 10)
 
-def riprova():
-    while True:
-        punteggio = gioco()
-        scelta = schermata_riprova(punteggio)
-        if scelta == "exit":
-            schermata_riprova(punteggio, uscita=True)
-            pygame.time.delay(1000)  # Attendere 1 secondo prima di uscire
-            pygame.quit()
-            quit()
+        pygame.time.Clock().tick(velocita_serpente)
 
-riprova()
+if __name__ == "__main__":
+    main()
